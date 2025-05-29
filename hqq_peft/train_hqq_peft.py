@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 from datasets import load_dataset
 from peft import LoraConfig, prepare_model_for_kbit_training, TaskType
@@ -14,15 +14,16 @@ import torch, multiprocessing
 
 device = 'cuda:0'
 model_id = "meta-llama/Llama-3.2-3B-Instruct"
-quant_config  = HqqConfig(dynamic_config={
-        'self_attn.q_proj':{'nbits':2, 'group_size':8},
-        'self_attn.k_proj':{'nbits':2, 'group_size':8},
-        'self_attn.v_proj':{'nbits':2, 'group_size':8},
-        'self_attn.o_proj':{'nbits':2, 'group_size':8},
-        'mlp.gate_proj':{'nbits':4, 'group_size':128},
-        'mlp.up_proj'  :{'nbits':4, 'group_size':128},
-        'mlp.down_proj':{'nbits':4, 'group_size':128},
-        })
+# quant_config  = HqqConfig(dynamic_config={
+#         'self_attn.q_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.k_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.v_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.o_proj':{'nbits':2, 'group_size':8},
+#         'mlp.gate_proj':{'nbits':4, 'group_size':64},
+#         'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+#         'mlp.down_proj':{'nbits':4, 'group_size':64},
+#         })
+quant_config = HqqConfig(nbits=2, group_size=8, quant_zero=False, axis=1)
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 tokenizer.pad_token = tokenizer.eos_token
@@ -56,21 +57,41 @@ peft_config = LoraConfig(
         target_modules= ['k_proj', 'q_proj', 'v_proj', 'o_proj', "gate_proj", "down_proj", "up_proj"]
 )
 
+# training_arguments = SFTConfig(
+#         output_dir="./HQQ-model3",
+#         eval_strategy="steps",
+#         do_eval=True,
+#         optim="paged_adamw_8bit",
+#         per_device_train_batch_size=8,
+#         gradient_accumulation_steps=4,
+#         per_device_eval_batch_size=8,
+#         log_level="debug",
+#         save_strategy="epoch",
+#         logging_steps=100,
+#         learning_rate=1e-4,
+#         eval_steps=100,
+#         num_train_epochs=3,
+#         # warmup_ratio=0.1,
+#         lr_scheduler_type="linear",
+# )
 training_arguments = SFTConfig(
-        output_dir="./HQQ-model2",
+        output_dir="./HQQ-model5",
         eval_strategy="steps",
         do_eval=True,
         optim="paged_adamw_8bit",
-        per_device_train_batch_size=16,
+        per_device_train_batch_size=8,
         gradient_accumulation_steps=4,
-        per_device_eval_batch_size=16,
+        per_device_eval_batch_size=8,
         log_level="debug",
-        save_strategy="epoch",
+        save_strategy="best",
+        save_total_limit=3,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
         logging_steps=100,
         learning_rate=1e-4,
         eval_steps=100,
         num_train_epochs=3,
-        warmup_ratio=0.1,
+        # warmup_ratio=0.1,
         lr_scheduler_type="linear",
 )
 

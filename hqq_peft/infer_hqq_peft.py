@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 from transformers import (
     AutoModelForCausalLM,
@@ -78,16 +78,17 @@ max_new_tokens = 256
 
 device = 'cuda:0'
 model_id = "meta-llama/Llama-3.2-3B-Instruct"
-peft_id = "HQQ-model/checkpoint-1719"
+peft_id = "HQQ-model4/checkpoint-400"
+merged_path = "HQQ-model3/merged"
 
 quant_config = HqqConfig(dynamic_config={
-        'self_attn.q_proj':{'nbits':2, 'group_size':16},
-        'self_attn.k_proj':{'nbits':2, 'group_size':16},
+        'self_attn.q_proj':{'nbits':2, 'group_size':8},
+        'self_attn.k_proj':{'nbits':2, 'group_size':8},
         'self_attn.v_proj':{'nbits':2, 'group_size':8},
         'self_attn.o_proj':{'nbits':2, 'group_size':8},
-        'mlp.gate_proj':{'nbits':4, 'group_size':128},
-        'mlp.up_proj'  :{'nbits':4, 'group_size':128},
-        'mlp.down_proj':{'nbits':4, 'group_size':128},
+        'mlp.gate_proj':{'nbits':4, 'group_size':64},
+        'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+        'mlp.down_proj':{'nbits':4, 'group_size':64},
         })
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -100,16 +101,7 @@ model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = PeftModel.from_pretrained(model, peft_id)
 model = model.merge_and_unload()
-
-model = AutoModelForCausalLM.from_pretrained(
-    peft_id,
-    torch_dtype=torch.float16,
-    device_map=device,
-    quantization_config=quant_config
-)
-tokenizer = AutoTokenizer.from_pretrained(peft_id)
-
-print(model)
+# model.save_pretrained(merged_path)
 
 # === (Optional) Uncomment the following lines if using the custom generate() function. ===
 model.prefill_forward = model.forward
@@ -176,7 +168,7 @@ import csv
 rounded_tput = round(org_tput, 1)
 ppl = round(ppl, 2)
 
-with open("result2.csv", mode="w", newline="") as file:
+with open("result.csv", mode="w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["Id", "value"])
     writer.writerow([0, ppl])
