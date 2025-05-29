@@ -4,3 +4,6 @@
 **/lora-ckpt-bs6/
 **/lora-quant/
 **/quant-lora/
+**/HQQ-2bit/
+**/HQQ-model/
+**/HQQ-model2/
