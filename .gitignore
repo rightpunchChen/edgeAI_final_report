@@ -5,7 +5,5 @@
 **/lora-quant/
 **/quant-lora/
 **/HQQ-2bit/
-**/HQQ-model/
-**/HQQ-model2/
-**/HQQ-model3/
-**/HQQ-model4/
+**/HQQ-model*/
+**/train_output/

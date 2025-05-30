@@ -78,7 +78,7 @@ max_new_tokens = 256
 
 device = 'cuda:0'
 model_id = "meta-llama/Llama-3.2-3B-Instruct"
-peft_id = "HQQ-model4/checkpoint-400"
+peft_id = "HQQ-model8/checkpoint-2400"
 merged_path = "HQQ-model3/merged"
 
 quant_config = HqqConfig(dynamic_config={
@@ -103,9 +103,11 @@ model = PeftModel.from_pretrained(model, peft_id)
 model = model.merge_and_unload()
 # model.save_pretrained(merged_path)
 
+model = torch.compile(model)
+model.eval()
 # === (Optional) Uncomment the following lines if using the custom generate() function. ===
 model.prefill_forward = model.forward
-model.forward = torch.compile(model.forward, mode='max-autotune', dynamic=False, fullgraph=True)
+# model.forward = torch.compile(model.forward, mode='max-autotune', dynamic=False, fullgraph=True)
 
 
 warmup_prompt = "Explain what AI is."

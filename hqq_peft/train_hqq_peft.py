@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 from datasets import load_dataset
 from peft import LoraConfig, prepare_model_for_kbit_training, TaskType
@@ -14,22 +14,22 @@ import torch, multiprocessing
 
 device = 'cuda:0'
 model_id = "meta-llama/Llama-3.2-3B-Instruct"
-# quant_config  = HqqConfig(dynamic_config={
-#         'self_attn.q_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.k_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.v_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.o_proj':{'nbits':2, 'group_size':8},
-#         'mlp.gate_proj':{'nbits':4, 'group_size':64},
-#         'mlp.up_proj'  :{'nbits':4, 'group_size':64},
-#         'mlp.down_proj':{'nbits':4, 'group_size':64},
-#         })
-quant_config = HqqConfig(nbits=2, group_size=8, quant_zero=False, axis=1)
+quant_config  = HqqConfig(dynamic_config={
+        'self_attn.q_proj':{'nbits':2, 'group_size':8},
+        'self_attn.k_proj':{'nbits':2, 'group_size':8},
+        'self_attn.v_proj':{'nbits':2, 'group_size':8},
+        'self_attn.o_proj':{'nbits':2, 'group_size':8},
+        'mlp.gate_proj':{'nbits':4, 'group_size':64},
+        'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+        'mlp.down_proj':{'nbits':4, 'group_size':64},
+        })
+# quant_config = HqqConfig(nbits=2, group_size=8, quant_zero=False, axis=1)
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 tokenizer.pad_token = tokenizer.eos_token
 
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
+    "lora-ckpt-bs6",
     torch_dtype=torch.float16,
     device_map=device,
     quantization_config=quant_config
@@ -49,9 +49,9 @@ ds = dataset.map(
 )
 
 peft_config = LoraConfig(
-        lora_alpha=32,
+        lora_alpha=16,
         lora_dropout=0.05,
-        r=32,
+        r=8,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
         target_modules= ['k_proj', 'q_proj', 'v_proj', 'o_proj', "gate_proj", "down_proj", "up_proj"]
@@ -75,24 +75,25 @@ peft_config = LoraConfig(
 #         lr_scheduler_type="linear",
 # )
 training_arguments = SFTConfig(
-        output_dir="./HQQ-model5",
+        output_dir="./HQQ-model8",
         eval_strategy="steps",
         do_eval=True,
-        optim="paged_adamw_8bit",
-        per_device_train_batch_size=8,
+        optim="adamw_torch_fused",
+        per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
         log_level="debug",
-        save_strategy="best",
+        save_strategy="steps",
+        save_steps=200,
         save_total_limit=3,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
-        logging_steps=100,
+        logging_steps=50,
         learning_rate=1e-4,
-        eval_steps=100,
+        eval_steps=200,
         num_train_epochs=3,
-        # warmup_ratio=0.1,
-        lr_scheduler_type="linear",
+        warmup_ratio=0.03,
+        lr_scheduler_type="cosine"
 )
 
 trainer = SFTTrainer(
