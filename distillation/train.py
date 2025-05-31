@@ -1,7 +1,11 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import get_peft_model, LoraConfig, TaskType
+from datasets import load_dataset
+from tqdm import tqdm
 
 TEACHER_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
 STUDENT_MODEL = "meta-llama/Llama-3.2-1B"
@@ -13,6 +17,9 @@ prompts = [
     "Explain what AI is.",
     "How to learn a new language?",
 ]
+# dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+# texts = [item["text"] for item in dataset]
+# texts = texts[:1000]
 
 class DistillDataset(Dataset):
     def __init__(self, prompts, tokenizer, teacher_model):
@@ -67,8 +74,9 @@ loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 optimizer = torch.optim.AdamW(student_model.parameters(), lr=1e-4)
 student_model.train()
 
-for epoch in range(100):
-    for batch in loader:
+for epoch in range(5):
+    pbar = tqdm(loader, desc=f"Epoch {epoch}")
+    for batch in pbar:
         input_ids = batch["input_ids"].to(DEVICE)
         attention_mask = batch["attention_mask"].to(DEVICE)
         teacher_logits = batch["teacher_logits"].to(DEVICE)
@@ -98,7 +106,7 @@ for epoch in range(100):
         loss.backward()
         optimizer.step()
 
-        print(f"Epoch {epoch} | Loss: {loss.item():.4f}")
+        # print(f"Epoch {epoch} | Loss: {loss.item():.4f}")
 
-student_model.save_pretrained("llama1b_lora_distilled")
-tokenizer.save_pretrained("llama1b_lora_distilled")
+student_model.save_pretrained("llama1b_lora_distilled2")
+tokenizer.save_pretrained("llama1b_lora_distilled2")
