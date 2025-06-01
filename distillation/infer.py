@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -84,11 +84,11 @@ def main():
     device = 'cuda:0'
     
     ### === TODO: Load your model (you may change this part) ===
-    # model_name = './llama1b_lora_distilled'
+    # model_name = "meta-llama/Llama-3.2-1B"
+    model_name = './llama1b_lora_distilled_peft/checkpoint-27540'
        
-    
     model = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3.2-1B",
+        model_name,
         torch_dtype=torch.float16,
         device_map=device,
     )
@@ -101,7 +101,7 @@ def main():
     print(model)
     
     model.eval() 
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B" )
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     
     # === (Optional) Uncomment the following lines if using the custom generate() function. ===
     model.prefill_forward = model.forward
