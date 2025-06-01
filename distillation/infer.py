@@ -1,8 +1,8 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, HqqConfig
 from tqdm.auto import tqdm
 from datasets import load_dataset
 import random
@@ -12,7 +12,8 @@ import numpy as np
 # from hqq.utils.patching import recommended_inductor_config_setter
 # from quant_cfg import get_quant_config_slm
 
-# from peft import PeftModel, PeftConfig
+from hqq.utils.patching import prepare_for_inference
+from peft import PeftModel, PeftConfig
 
 def generate(model, input_ids, past_key_values, max_new_tokens):
     input_ids = input_ids.clone()
@@ -75,6 +76,12 @@ def evaluate_ppl(model, tokenizer, device="cuda:0"):
     
     return ppl.item()
 
+def print_model_size(model):
+    total_params = sum(p.numel() for p in model.parameters())
+    total_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    print(f"Total parameters: {total_params:,}")
+    print(f"Model size (float16): {total_bytes / (1024 ** 2):.2f} MB = {total_bytes / (1024 ** 3):.2f} GB")
+    
 def main():
     ############## Set Up ##############
     torch.manual_seed(0)
@@ -84,20 +91,39 @@ def main():
     device = 'cuda:0'
     
     ### === TODO: Load your model (you may change this part) ===
-    # model_name = "meta-llama/Llama-3.2-1B"
-    model_name = './llama1b_lora_distilled_peft/checkpoint-27540'
-       
+    model_name = "meta-llama/Llama-3.2-1B-Instruct"
+    peft_model_name = './llama1b_lora_distilled_peft2/checkpoint-250'
+    quant_config  = HqqConfig(dynamic_config={
+        'self_attn.q_proj':{'nbits':2, 'group_size':64},
+        'self_attn.k_proj':{'nbits':2, 'group_size':64},
+        'self_attn.v_proj':{'nbits':4, 'group_size':64},
+        'self_attn.o_proj':{'nbits':4, 'group_size':64},
+        'mlp.gate_proj':{'nbits':4, 'group_size':64},
+        'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+        'mlp.down_proj':{'nbits':4, 'group_size':64},
+        })
+    
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.float16,
         device_map=device,
     )
+    print_model_size(model)
+    del model
     
-    # print("Model size:", get_size_of_model(model))
+    base_model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map=device,
+        quantization_config=quant_config
+    )
+    model = PeftModel.from_pretrained(base_model, peft_model_name)
+    model = model.merge_and_unload()
+    
+    print_model_size(model)
+    prepare_for_inference(model, backend='gemlite') 
     torch.cuda.empty_cache()
     #####################################
-    
-    # print("Model (quant) size (MB):", get_size_of_model(model))
     print(model)
     
     model.eval() 
