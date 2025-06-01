@@ -12,7 +12,8 @@ from datasets import load_dataset
 from trl import SFTTrainer, SFTConfig
 
 MODEL_OUTPUT = "llama1b_lora_distilled_peft2"
-TEACHER_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
+# TEACHER_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
+TEACHER_MODEL = "lora-ckpt-bs6"
 STUDENT_MODEL = "meta-llama/Llama-3.2-1B"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
@@ -80,7 +81,7 @@ student_model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.float16,
     device_map=DEVICE,
     quantization_config=HqqConfig(
-        nbits=2, group_size=8,
+        nbits=4, group_size=64,
         quant_zero=False, axis=1)
 )
 
