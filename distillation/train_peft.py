@@ -14,7 +14,7 @@ from trl import SFTTrainer, SFTConfig
 MODEL_OUTPUT = "llama1b_lora_distilled_peft2"
 # TEACHER_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
 TEACHER_MODEL = "lora-ckpt-bs6"
-STUDENT_MODEL = "meta-llama/Llama-3.2-1B"
+STUDENT_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
 TEMPERATURE = 2.0
@@ -137,7 +137,7 @@ trainer = DistillationTrainer(
         eval_dataset=ds['test'],
         dataset_text_field="text",
         peft_config=lora_cfg,
-        max_seq_length=512,
+        max_seq_length=1024,
         tokenizer=tokenizer,
     )
 
