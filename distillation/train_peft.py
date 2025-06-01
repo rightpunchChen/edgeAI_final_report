@@ -3,12 +3,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 import torch, multiprocessing
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers import (
+    HqqConfig, AutoModelForCausalLM, AutoTokenizer,
+    Trainer, TrainingArguments
+    )
 from peft import get_peft_model, LoraConfig, TaskType
 from datasets import load_dataset
 from trl import SFTTrainer, SFTConfig
 
-MODEL_OUTPUT = "llama1b_lora_distilled_peft"
+MODEL_OUTPUT = "llama1b_lora_distilled_peft2"
 TEACHER_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
 STUDENT_MODEL = "meta-llama/Llama-3.2-1B"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,12 +72,16 @@ tokenizer.pad_token = tokenizer.eos_token
 teacher_model = AutoModelForCausalLM.from_pretrained(
     TEACHER_MODEL,
     torch_dtype=torch.float16,
-    device_map="auto"
+    device_map=DEVICE
 )
 
 student_model = AutoModelForCausalLM.from_pretrained(
     STUDENT_MODEL,
-    torch_dtype=torch.float16
+    torch_dtype=torch.float16,
+    device_map=DEVICE,
+    quantization_config=HqqConfig(
+        nbits=2, group_size=8,
+        quant_zero=False, axis=1)
 )
 
 lora_cfg = LoraConfig(
@@ -89,20 +96,19 @@ lora_cfg = LoraConfig(
 
 training_args = DistillationTrainingArguments(
     output_dir=MODEL_OUTPUT,
-    overwrite_output_dir=True,
     do_eval=True,
     save_strategy = "steps",
-    save_steps=200,
+    save_steps=250,
     eval_strategy = "steps",
-    eval_steps=200,
-    num_train_epochs=6,
+    eval_steps=250,
+    num_train_epochs=3,
     gradient_accumulation_steps=1,
     per_device_train_batch_size=BATCH_SIZE,
     per_device_eval_batch_size=8,
-    save_total_limit=1,  # Set to zero to avoid saving
+    save_total_limit=3,  # Set to zero to avoid saving
     warmup_ratio=0.03,
     lr_scheduler_type="linear",
-    learning_rate=1e-4,
+    learning_rate=5e-5,
     logging_steps=50,
     fp16=True,
     load_best_model_at_end=True,
@@ -113,13 +119,15 @@ training_args = DistillationTrainingArguments(
 
 
 trainer = DistillationTrainer(
-        student_model,
+        model=student_model,
         args=training_args,
         teacher_model=teacher_model,
         train_dataset=ds['train'],
         eval_dataset=ds['test'],
         dataset_text_field="text",
         peft_config=lora_cfg,
+        max_seq_length=512,
+        tokenizer=tokenizer,
     )
 
 
