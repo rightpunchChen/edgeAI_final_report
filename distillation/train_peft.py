@@ -7,7 +7,7 @@ from transformers import (
     HqqConfig, AutoModelForCausalLM, AutoTokenizer,
     Trainer, TrainingArguments
     )
-from peft import get_peft_model, LoraConfig, TaskType
+from peft import get_peft_model, prepare_model_for_kbit_training, LoraConfig, TaskType
 from datasets import load_dataset
 from trl import SFTTrainer, SFTConfig
 
@@ -76,16 +76,16 @@ teacher_model = AutoModelForCausalLM.from_pretrained(
     device_map=DEVICE
 )
 
-# quant_config  = HqqConfig(dynamic_config={
-#         'self_attn.q_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.k_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.v_proj':{'nbits':2, 'group_size':8},
-#         'self_attn.o_proj':{'nbits':2, 'group_size':8},
-#         'mlp.gate_proj':{'nbits':4, 'group_size':64},
-#         'mlp.up_proj'  :{'nbits':4, 'group_size':64},
-#         'mlp.down_proj':{'nbits':4, 'group_size':64},
-#         })
-quant_config = HqqConfig(nbits=4, group_size=64, quant_zero=False, axis=1)
+quant_config  = HqqConfig(dynamic_config={
+        'self_attn.q_proj':{'nbits':2, 'group_size':64},
+        'self_attn.k_proj':{'nbits':2, 'group_size':64},
+        'self_attn.v_proj':{'nbits':4, 'group_size':64},
+        'self_attn.o_proj':{'nbits':4, 'group_size':64},
+        'mlp.gate_proj':{'nbits':4, 'group_size':64},
+        'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+        'mlp.down_proj':{'nbits':4, 'group_size':64},
+        })
+# quant_config = HqqConfig(nbits=4, group_size=64, quant_zero=False, axis=1)
 
 student_model = AutoModelForCausalLM.from_pretrained(
     STUDENT_MODEL,
@@ -93,6 +93,7 @@ student_model = AutoModelForCausalLM.from_pretrained(
     device_map=DEVICE,
     quantization_config=quant_config
 )
+student_model = prepare_model_for_kbit_training(student_model)
 
 lora_cfg = LoraConfig(
     r=8,
