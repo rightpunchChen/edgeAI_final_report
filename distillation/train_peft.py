@@ -19,6 +19,14 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 4
 TEMPERATURE = 2.0
 
+# Print trainable parameters and their total size before training
+def print_trainable_parameters(model):
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    total_bytes = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
+    print(f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
+    print(f"Trainable size: {total_bytes / (1024 ** 2):.2f} MB")
+    
 class DistillationTrainingArguments(SFTConfig):
     def __init__(self, *args, alpha=0.5, temperature=2.0, **kwargs):
         super().__init__(*args, **kwargs)
@@ -91,9 +99,9 @@ student_model = AutoModelForCausalLM.from_pretrained(
     STUDENT_MODEL,
     torch_dtype=torch.float16,
     device_map=DEVICE,
-    quantization_config=quant_config
+    # quantization_config=quant_config
 )
-student_model = prepare_model_for_kbit_training(student_model)
+# student_model = prepare_model_for_kbit_training(student_model)
 
 lora_cfg = LoraConfig(
     r=8,
@@ -141,6 +149,7 @@ trainer = DistillationTrainer(
         tokenizer=tokenizer,
     )
 
+print_trainable_parameters(student_model)
 
 trainer.train()
 
