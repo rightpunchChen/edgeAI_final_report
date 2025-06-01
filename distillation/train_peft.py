@@ -76,13 +76,22 @@ teacher_model = AutoModelForCausalLM.from_pretrained(
     device_map=DEVICE
 )
 
+# quant_config  = HqqConfig(dynamic_config={
+#         'self_attn.q_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.k_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.v_proj':{'nbits':2, 'group_size':8},
+#         'self_attn.o_proj':{'nbits':2, 'group_size':8},
+#         'mlp.gate_proj':{'nbits':4, 'group_size':64},
+#         'mlp.up_proj'  :{'nbits':4, 'group_size':64},
+#         'mlp.down_proj':{'nbits':4, 'group_size':64},
+#         })
+quant_config = HqqConfig(nbits=4, group_size=64, quant_zero=False, axis=1)
+
 student_model = AutoModelForCausalLM.from_pretrained(
     STUDENT_MODEL,
     torch_dtype=torch.float16,
     device_map=DEVICE,
-    quantization_config=HqqConfig(
-        nbits=4, group_size=64,
-        quant_zero=False, axis=1)
+    quantization_config=quant_config
 )
 
 lora_cfg = LoraConfig(
