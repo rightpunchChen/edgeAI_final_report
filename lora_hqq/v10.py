@@ -1,35 +1,17 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
 import torch
 import torch.nn as nn
-from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, GPTQConfig,
-    TrainingArguments, Trainer, DataCollatorForLanguageModeling
-)
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm.auto import tqdm
 from datasets import load_dataset
 import random
 import numpy as np
 
-from peft import (
-    PeftModel, PeftConfig, get_peft_model, LoraConfig,
-    TaskType, prepare_model_for_kbit_training
-)
-from vllm import LLM, SamplingParams
-
-def prepare_gptq_model(model_name, gptq_path, device):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    quantization_config = GPTQConfig(
-        bits=4,
-        dataset="wikitext2",
-        tokenizer=tokenizer
-        )
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map=device,
-        quantization_config=quantization_config)
-    model.save_pretrained(gptq_path)
-    tokenizer.save_pretrained(gptq_path)
+from hqq_utils import AutoHQQHFModel, get_size_of_model
+from hqq.utils.patching import recommended_inductor_config_setter, prepare_for_inference
+from quant_cfg import get_quant_config
+from peft import PeftModel, PeftConfig
 
 def train_lora_model(base_model_name, output_dir, device):
     from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
@@ -46,7 +28,7 @@ def train_lora_model(base_model_name, output_dir, device):
     config = LoraConfig(
         r=8,
         lora_alpha=16,
-        target_modules=["q_proj", "v_proj", "down_proj"],
+        target_modules=["v_proj", "up_proj", "down_proj"],
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM
@@ -80,11 +62,40 @@ def train_lora_model(base_model_name, output_dir, device):
     trainer.train()
     model.save_pretrained(output_dir)
 
-def generate_vllm(engine, prompt: str, sampling_params: SamplingParams):
-    """Generate text with vLLM and return the RequestOutput object."""
-    outputs = engine.generate([prompt], sampling_params=sampling_params)
-    return outputs[0]
 
+def generate(model, input_ids, past_key_values, max_new_tokens):
+    input_ids = input_ids.clone()
+    with torch.no_grad():
+        # Prefill
+        outputs = model.prefill_forward(
+            input_ids,
+            past_key_values=past_key_values,
+            position_ids=None,
+            attention_mask=None,
+            cache_position=None,
+            logits_to_keep=1
+        )
+        past_key_values = outputs.past_key_values
+        next_token = torch.argmax(outputs.logits, dim=-1)
+        input_ids = torch.cat([input_ids, next_token], dim=-1)
+
+        # Token-by-token Decoding
+        for _ in range(max_new_tokens):
+            pos = input_ids.shape[1]
+            cache_position = torch.arange(pos, pos + 1, device=input_ids.device, dtype=torch.long)
+
+            outputs = model(
+                next_token,
+                past_key_values=past_key_values,
+                position_ids=cache_position.unsqueeze(0),
+                cache_position=cache_position
+            )
+            logits = outputs.logits
+            next_token = torch.argmax(logits, dim=-1)
+            input_ids = torch.cat([input_ids, next_token], dim=-1)
+            past_key_values = outputs.past_key_values
+
+    return input_ids
 
 def evaluate_ppl(model, tokenizer, device="cuda:0"):
     test_dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
@@ -117,73 +128,64 @@ def main():
     ############## Set Up ##############
     torch.manual_seed(0)
     random.seed(0)
+    recommended_inductor_config_setter() #add
     
     max_new_tokens = 256    # Number of new tokens to generate
     device = 'cuda:0'
     
-    model_name = "meta-llama/Llama-3.2-3B-Instruct"
-    peft_model_path = "v10"
-    merged_path = "./merged"
-    gptq_path = './gptq-4bit_model'
-    
     ### === TODO: Load your model (you may change this part) ===
-    if not os.path.exists(peft_model_path):
-        train_lora_model(model_name, peft_model_path, device)
+    model_name = "meta-llama/Llama-3.2-3B-Instruct"   
     
-    if not os.path.exists(merged_path):
-        print("load peft model")
-        base_model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16,
-            device_map=device,
-        )
-        peft_model = PeftModel.from_pretrained(base_model, peft_model_path)
-        merged_model = peft_model.merge_and_unload()
-        merged_model.save_pretrained(merged_path)
-        peft_tokenizer = AutoTokenizer.from_pretrained(model_name)
-        peft_tokenizer.save_pretrained(merged_path)
+    peft_model_path = "./v10"
+    train_lora_model(model_name, peft_model_path, device)
     
-    print("load gptq model")
-    if not os.path.exists(gptq_path):
-        prepare_gptq_model(merged_path, gptq_path, device)
-    
-    gptq_model = AutoModelForCausalLM.from_pretrained(
-        gptq_path,
-        device_map=device
-        )
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    torch.cuda.empty_cache()
-    # --- vLLM engine ---
-    print("vLLM")
-    llm = LLM(
-        model=gptq_path,
-        tokenizer=gptq_path,
-        dtype="float16",
-        trust_remote_code=True,
-        quantization="gptq",
-        max_model_len=4096,
-        gpu_memory_utilization=0.7,
-        compilation_config={
-            "cudagraph_capture_sizes": [1],
-            "max_capture_size": 1
-        }
+    base_model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map=device,
     )
+    model = PeftModel.from_pretrained(base_model, peft_model_path)
+    model = model.merge_and_unload()
+    
+    # backend = 'gemlite'
+    # quant_config = get_quant_config_v6(model)
+    # AutoHQQHFModel.quantize_model(model, quant_config=quant_config, compute_dtype=torch.float16, device=device)
+    # prepare_for_inference(model, backend=backend)
 
-    sampling_params = SamplingParams(
-        temperature=0.0,
-        top_p=1.0,
-        max_tokens=max_new_tokens,
-    )
     torch.cuda.empty_cache()
     #####################################
     
+    model.eval() 
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    # === (Optional) Uncomment the following lines if using the custom generate() function. ===
+    model.prefill_forward = model.forward
+    model.forward = torch.compile(model.forward, mode='max-autotune', dynamic=False, fullgraph=True)
+
+
     warmup_prompt = "Explain what AI is."
-    for _ in tqdm(range(5), desc="Warm Up..."):
-        _ = llm.generate([warmup_prompt], sampling_params=sampling_params)
-    torch.cuda.empty_cache()
+    inputs = tokenizer(warmup_prompt, return_tensors="pt").to(device)
+    input_ids = inputs["input_ids"]
+    attention_mask = inputs["attention_mask"]
+    
+    # === (Optional) Set up StaticCache for manual KV cache management ===
+    from transformers import StaticCache
+    past_key_values = StaticCache(
+        config=model.config, 
+        max_batch_size=1, 
+        max_cache_len=max_new_tokens + 16, 
+        device=model.device, 
+        dtype=torch.float16
+    )
+
+    for i in tqdm(range(5), desc="Warm Up..."):
+        generated = generate(model, input_ids, past_key_values, max_new_tokens)
+        past_key_values.reset()
         
     prompt = "How to learn a new language?"
-
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    input_ids = inputs["input_ids"]
+    attention_mask = inputs["attention_mask"]
     tputs = []
     time_record = []
     for _ in tqdm(range(10), desc="Test Inference"):
@@ -192,18 +194,17 @@ def main():
         end = torch.cuda.Event(enable_timing=True)
         start.record()
 
-        outputs = llm.generate([prompt], sampling_params=sampling_params)
-        generated_ids = outputs[0].outputs[0].token_ids
+        generated = generate(model, input_ids, past_key_values, max_new_tokens)
+        past_key_values.reset()
 
         end.record()
         torch.cuda.synchronize()
         elapsed_ms = start.elapsed_time(end)
-        tput = len(generated_ids) / (elapsed_ms / 1000)
+        tput = max_new_tokens / (elapsed_ms / 1000)
         time_record.append(elapsed_ms / 1000)
         tputs.append(tput)
         
-    
-    response = outputs[0].outputs[0].text
+    response = tokenizer.decode(generated[0][input_ids.shape[1]:], skip_special_tokens=True)
     sorted_tputs = np.sort(tputs)[2:-2]
     org_tput = np.mean(sorted_tputs)
     print(f'Prompt: {prompt}\nResponse: {response}\n')
@@ -213,8 +214,7 @@ def main():
 
     ### Your final throughput result ###
     print(f'Throughput: {org_tput} toks/s')
-    
-    ppl = evaluate_ppl(gptq_model, tokenizer, device)
+    ppl = evaluate_ppl(model, tokenizer, device)
     print(f"Perplexity (PPL): {ppl}")
     
     # Save results to CSV
