@@ -1,0 +1,10 @@
+*.csv
+**/__pycache__/
+**/lora-ckpt/
+**/lora-ckpt-bs6/
+**/lora-quant/
+**/quant-lora/
+**/HQQ-2bit/
+**/HQQ-model*/
+**/train_output/
+**/llama1b_lora_distilled/
