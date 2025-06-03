@@ -32,6 +32,16 @@ pip install peft
 ```
 Note: Ensure your environment supports CUDA and has the required GPU memory (16GB+ recommended).
 
+## 🛠 Custom Paths
+You can change the output directories for your models by modifying the following variables in the main() function:
+
+```python
+peft_model_path = "your_custom_peft_path"
+merged_path = "./your_custom_merged_path"
+gptq_path = './your_custom_gptq_path'
+```
+This allows you to organize multiple experiments or avoid overwriting results.
+
 ## 🚀 Usage
 Run the full pipeline:
 ```bash
