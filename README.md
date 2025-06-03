@@ -2,6 +2,8 @@
 
 This project demonstrates how to fine-tune a LLaMA-3 model using LoRA (Low-Rank Adaptation), merge the adapter back into the base model, apply GPTQ (4-bit quantization) for compression, and finally perform efficient inference using vLLM.
 
+Huggingface model page: rightpunch/Llama-3.2-3B-Instruct_PEFT_GPTQ
+
 ## 📌 Overview
 
 Pipeline Summary:
