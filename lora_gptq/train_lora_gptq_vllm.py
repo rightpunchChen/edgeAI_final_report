@@ -123,8 +123,8 @@ def main():
     
     model_name = "meta-llama/Llama-3.2-3B-Instruct"
     peft_model_path = "v10"
-    merged_path = "./lora-quant/merged"
-    gptq_path = './lora-quant/gptq-4bit_model'
+    merged_path = "./merged"
+    gptq_path = './gptq-4bit_model'
     
     ### === TODO: Load your model (you may change this part) ===
     if not os.path.exists(peft_model_path):
@@ -152,7 +152,7 @@ def main():
         device_map=device
         )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
+    torch.cuda.empty_cache()
     # --- vLLM engine ---
     print("vLLM")
     llm = LLM(
@@ -162,8 +162,11 @@ def main():
         trust_remote_code=True,
         quantization="gptq",
         max_model_len=4096,
-        gpu_memory_utilization=0.35,
-        tensor_parallel_size=1
+        gpu_memory_utilization=0.7,
+        compilation_config={
+            "cudagraph_capture_sizes": [1],
+            "max_capture_size": 1
+        }
     )
 
     sampling_params = SamplingParams(
