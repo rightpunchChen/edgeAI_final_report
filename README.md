@@ -27,7 +27,24 @@ cd edgeAI_final_report
 pip install -r requirements.txt
 python main.py
 ```
-
+If the installation fails using requirement.txt, you can install the relevant dependencies through the following steps.
+```bash
+pip install huggingface-hub[cli]
+pip install transformers==4.51.1
+pip install torch==2.6.0
+pip install torchvision==0.21.0
+pip install torchaudio==2.6.0
+pip install triton==3.2.0
+pip install timm==1.0.15
+pip install datasets==3.5.0
+pip install accelerate==1.6.0
+pip install gemlite==0.4.4
+pip install hqq==0.2.5
+pip install vllm
+pip install optimum
+pip install auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+pip install peft
+```
 
 
 ## 🚀 Training
@@ -72,7 +89,7 @@ Response: Learning a new language can be a challenging but rewarding experience.
 4 . Practice regularly : Practice speaking
 
 
-Throughput: 86.5 toks/s
+Throughput: 87.0 toks/s
 Perplexity (PPL): 9.75
 ```
 
@@ -80,5 +97,5 @@ CSV format:
 ```csv
 Id,value
 0,9.75       # PPL
-1,86.5       # Throughput
+1,87.0       # Throughput
 ```
