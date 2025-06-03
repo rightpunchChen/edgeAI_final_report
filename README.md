@@ -25,6 +25,7 @@ conda create -n llama_env python=3.10
 conda activate llama_env
 cd edgeAI_final_report
 pip install -r requirements.txt
+huggingface-cli login
 python main.py
 ```
 If the installation fails using requirement.txt, you can install the relevant dependencies through the following steps.
