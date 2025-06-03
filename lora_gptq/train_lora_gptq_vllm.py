@@ -122,7 +122,7 @@ def main():
     device = 'cuda:0'
     
     model_name = "meta-llama/Llama-3.2-3B-Instruct"
-    peft_model_path = "lora-ckpt-bs6"
+    peft_model_path = "v10"
     merged_path = "./lora-quant/merged"
     gptq_path = './lora-quant/gptq-4bit_model'
     
