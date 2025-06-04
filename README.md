@@ -44,6 +44,7 @@ pip install peft
 huggingface-cli login
 python main.py
 ```
+Note: Since installing `gemlite` requires `torch` to be installed first, using `requirements.txt` may cause errors, so we recommend installing related dependencies step by step.
 
 ## 🚀 Training
 If you want to train the new model run the full training pipeline:
