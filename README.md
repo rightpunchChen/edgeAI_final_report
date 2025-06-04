@@ -48,8 +48,8 @@ python main.py
 ## 🚀 Training
 If you want to train the new model run the full training pipeline:
 ```bash
-    cd lora_gptq
-    python train_lora_gptq_vllm.py
+cd lora_gptq
+python train_lora_gptq_vllm.py
 ```
 This will:
 - Fine-tune a LLaMA-3 model using LoRA (if not already trained).
