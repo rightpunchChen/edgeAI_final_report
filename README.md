@@ -24,12 +24,7 @@ git clone https://github.com/rightpunchChen/edgeAI_final_report.git
 conda create -n llama_env python=3.10
 conda activate llama_env
 cd edgeAI_final_report
-pip install -r requirements.txt
-huggingface-cli login
-python main.py
-```
-If the installation fails using requirement.txt, you can install the relevant dependencies through the following steps.
-```bash
+
 pip install huggingface-hub[cli]
 pip install transformers==4.51.1
 pip install torch==2.6.0
@@ -45,8 +40,10 @@ pip install vllm
 pip install optimum
 pip install auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
 pip install peft
-```
 
+huggingface-cli login
+python main.py
+```
 
 ## 🚀 Training
 If you want to train the new model run the full training pipeline:
